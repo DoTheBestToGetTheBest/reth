@@ -92,16 +92,11 @@ where
     })
 }
 
-/// Calculates the log root for headers.
-pub fn calculate_log_root(logs: &[Log]) -> B256 {
-    //https://github.com/ethereum/go-ethereum/blob/356bbe343a30789e77bb38f25983c8f2f2bfbb47/cmd/evm/internal/t8ntool/execution.go#L255
-    let mut logs_rlp = Vec::new();
-    alloy_rlp::encode_list(logs, &mut logs_rlp);
-    keccak256(logs_rlp)
-}
-
 /// Calculates the root hash for ommer/uncle headers.
 pub fn calculate_ommers_root(ommers: &[Header]) -> B256 {
+    if ommers.is_empty() {
+        return EMPTY_ROOT
+    }
     // RLP Encode
     let mut ommers_rlp = Vec::new();
     alloy_rlp::encode_list(ommers, &mut ommers_rlp);
