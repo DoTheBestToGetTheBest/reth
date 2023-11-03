@@ -1276,9 +1276,9 @@ impl RpcServerConfig {
     ///
     /// If no server is configured, no server will be be launched on [RpcServerConfig::start].
     pub fn has_server(&self) -> bool {
-        self.http_server_config.is_some() ||
-            self.ws_server_config.is_some() ||
-            self.ipc_server_config.is_some()
+        self.http_server_config.is_some()
+            || self.ws_server_config.is_some()
+            || self.ipc_server_config.is_some()
     }
 
     /// Returns the [SocketAddr] of the http server
@@ -1309,15 +1309,16 @@ impl RpcServerConfig {
             Ipv4Addr::LOCALHOST,
             DEFAULT_HTTP_RPC_PORT,
         )));
+        let jwt_secret = self.jwt_secret.clone().unwrap();
 
         let ws_socket_addr = self
             .ws_addr
             .unwrap_or(SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST, DEFAULT_WS_RPC_PORT)));
         let metrics = RpcServerMetrics::default();
         // If both are configured on the same port, we combine them into one server.
-        if self.http_addr == self.ws_addr &&
-            self.http_server_config.is_some() &&
-            self.ws_server_config.is_some()
+        if self.http_addr == self.ws_addr
+            && self.http_server_config.is_some()
+            && self.ws_server_config.is_some()
         {
             let cors = match (self.ws_cors_domains.as_ref(), self.http_cors_domains.as_ref()) {
                 (Some(ws_cors), Some(http_cors)) => {
@@ -1326,7 +1327,7 @@ impl RpcServerConfig {
                             http_cors_domains: Some(http_cors.clone()),
                             ws_cors_domains: Some(ws_cors.clone()),
                         }
-                        .into())
+                        .into());
                     }
                     Some(ws_cors)
                 }
@@ -1355,7 +1356,8 @@ impl RpcServerConfig {
                 http_local_addr: Some(addr),
                 ws_local_addr: Some(addr),
                 server: WsHttpServers::SamePort(server),
-            })
+                jwt_secret: Some(jwt_secret),
+            });
         }
 
         let mut http_local_addr = None;
@@ -1397,6 +1399,7 @@ impl RpcServerConfig {
             http_local_addr,
             ws_local_addr,
             server: WsHttpServers::DifferentPort { http: http_server, ws: ws_server },
+            jwt_secret: Some(jwt_secret),
         })
     }
 
@@ -1552,7 +1555,7 @@ impl TransportRpcModules {
         other: impl Into<Methods>,
     ) -> Result<bool, jsonrpsee::core::error::Error> {
         if let Some(ref mut http) = self.http {
-            return http.merge(other.into()).map(|_| true)
+            return http.merge(other.into()).map(|_| true);
         }
         Ok(false)
     }
@@ -1567,7 +1570,7 @@ impl TransportRpcModules {
         other: impl Into<Methods>,
     ) -> Result<bool, jsonrpsee::core::error::Error> {
         if let Some(ref mut ws) = self.ws {
-            return ws.merge(other.into()).map(|_| true)
+            return ws.merge(other.into()).map(|_| true);
         }
         Ok(false)
     }
@@ -1582,7 +1585,7 @@ impl TransportRpcModules {
         other: impl Into<Methods>,
     ) -> Result<bool, jsonrpsee::core::error::Error> {
         if let Some(ref mut ipc) = self.ipc {
-            return ipc.merge(other.into()).map(|_| true)
+            return ipc.merge(other.into()).map(|_| true);
         }
         Ok(false)
     }
@@ -1616,6 +1619,8 @@ struct WsHttpServer {
     ws_local_addr: Option<SocketAddr>,
     /// Configured ws,http servers
     server: WsHttpServers,
+    /// The jwt secret.
+    jwt_secret: Option<JwtSecret>,
 }
 
 /// Enum for holding the http and ws servers in all possible combinations.
@@ -1790,6 +1795,10 @@ impl RpcServer {
     pub fn http_local_addr(&self) -> Option<SocketAddr> {
         self.ws_http.http_local_addr
     }
+    /// Return the JwtSecret of the the server
+    pub fn thing(&self) -> Option<JwtSecret> {
+        self.ws_http.jwt_secret.clone()
+    }
 
     /// Returns the [`SocketAddr`] of the ws server if started.
     pub fn ws_local_addr(&self) -> Option<SocketAddr> {
@@ -1817,6 +1826,7 @@ impl RpcServer {
             ws: None,
             ipc_endpoint: None,
             ipc: None,
+            jwt_secret: None,
         };
 
         let (http, ws) = ws_http.server.start(http, ws, &config).await?;
@@ -1857,11 +1867,17 @@ pub struct RpcServerHandle {
     ws: Option<ServerHandle>,
     ipc_endpoint: Option<String>,
     ipc: Option<ServerHandle>,
+    jwt_secret: Option<JwtSecret>,
 }
 
 // === impl RpcServerHandle ===
 
 impl RpcServerHandle {
+    /// Configures the JWT secret for authentication.
+    pub fn with_jwt_secret(mut self, secret: Option<JwtSecret>) -> Self {
+        self.jwt_secret = secret;
+        self
+    }
     /// Returns the [`SocketAddr`] of the http server if started.
     pub fn http_local_addr(&self) -> Option<SocketAddr> {
         self.http_local_addr
