@@ -45,6 +45,8 @@ use std::{
 };
 use tracing::{debug, info};
 
+use super::utils::get_or_create_jwt_secret_from_path;
+
 /// Default max number of subscriptions per connection.
 pub(crate) const RPC_DEFAULT_MAX_SUBS_PER_CONN: u32 = 1024;
 /// Default max request size in MB.
@@ -354,7 +356,7 @@ impl RethRpcConfig for RpcServerArgs {
     }
 
     fn rpc_max_response_size_bytes(&self) -> u32 {
-        self.rpc_max_response_size * 1024 * 1024
+        self.rpc_max_response_size.checked_mul(1024 * 1024).unwrap_or(u32::MAX)
     }
 
     fn gas_price_oracle_config(&self) -> GasPriceOracleConfig {
@@ -446,15 +448,7 @@ impl RethRpcConfig for RpcServerArgs {
                 debug!(target: "reth::cli", user_path=?fpath, "Reading JWT auth secret file");
                 JwtSecret::from_file(fpath)
             }
-            None => {
-                if default_jwt_path.exists() {
-                    debug!(target: "reth::cli", ?default_jwt_path, "Reading JWT auth secret file");
-                    JwtSecret::from_file(&default_jwt_path)
-                } else {
-                    info!(target: "reth::cli", ?default_jwt_path, "Creating JWT auth secret file");
-                    JwtSecret::try_create(&default_jwt_path)
-                }
-            }
+            None => get_or_create_jwt_secret_from_path(&default_jwt_path),
         }
     }
 
