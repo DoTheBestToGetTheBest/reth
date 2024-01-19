@@ -36,5 +36,10 @@ name = "network"
 path = "network.rs"
 
 [[example]]
+name = "p2p"
+path = "p2p.rs"
+
+
+[[example]]
 name = "network-txpool"
 path = "network-txpool.rs"
